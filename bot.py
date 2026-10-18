@@ -150,13 +150,11 @@ async def run_bot(transport: BaseTransport):
             )
         ])
 
-    @transport.event_handler("on_client_connected")
-    async def on_client_connected(transport, client):
-        logger.info("Client connected")
-
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
         logger.info("Client disconnected")
+        for message in context.get_messages():
+            logger.info(f"Context: {message}")
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=False)
