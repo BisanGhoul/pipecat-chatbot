@@ -33,10 +33,8 @@ from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
-    LLMAssistantAggregatorParams,
     LLMUserAggregatorParams,
 )
-from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.runner.types import DailyRunnerArguments, RunnerArguments, SmallWebRTCRunnerArguments
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
@@ -46,7 +44,6 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.workers.runner import WorkerRunner
-from pipecat.frames.frames import LLMMessagesAppendFrame
 
 load_dotenv(override=True)
 
@@ -65,21 +62,6 @@ class TranscriptionLogger(FrameProcessor):
         await self.push_frame(frame, direction)  # direction is used to push the frame the same direction it came from
 
 transcription_logger = TranscriptionLogger()
-
-async def get_available_cars(params: FunctionCallParams, budget: int):
-    """Get cars available for lease within the caller's monthly budget.
-
-    Args:
-        budget: The caller's maximum monthly payment in dollars.
-    """
-    cars = [
-        {"model": "Toyota Corolla", "monthly": 299},
-        {"model": "Honda CR-V", "monthly": 399},
-        {"model": "Tesla Model 3", "monthly": 499},
-    ]
-    await params.result_callback([c for c in cars if c["monthly"] <= budget])
-
-context = LLMContext(tools=[get_available_cars])    
 
 async def run_bot(transport: BaseTransport):
     """Main bot logic."""
@@ -111,24 +93,12 @@ async def run_bot(transport: BaseTransport):
         If the caller asks about something unrelated, politely bring the conversation back to car leasing.""",        ),
     )
 
-    vad_analyzer = SileroVADAnalyzer(
-        params=VADParams(
-        confidence=0.7,      # Minimum confidence for voice detection
-        start_secs=0.2,      # Time to wait before confirming speech start
-        stop_secs=0.2,       # Time to wait before confirming speech stop
-        min_volume=0.6,      # Minimum volume threshold    
-        )
-    )
-
     context = LLMContext()
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
-            vad_analyzer=vad_analyzer,
+            vad_analyzer=SileroVADAnalyzer(),
         ),
-        assistant_params=LLMAssistantAggregatorParams(
-        enable_auto_context_summarization=True,
-        )
     )
 
     # Pipeline - assembled from reusable components
@@ -157,12 +127,10 @@ async def run_bot(transport: BaseTransport):
     @worker.rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi):
         # Kick off the conversation
-        await worker.queue_frames([
-            LLMMessagesAppendFrame(
-                [{"role": "developer", "content": "Greet the caller as Sara from DriveEasy and ask how you can help them today."}],
-                run_llm=True,
-            )
-        ])
+        context.add_message(
+            {"role": "developer", "content": "Greet the caller as Sara from DriveEasy and ask how you can help them today."}
+        )
+        await worker.queue_frames([LLMRunFrame()])
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
