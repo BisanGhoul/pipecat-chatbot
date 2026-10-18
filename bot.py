@@ -33,8 +33,10 @@ from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
+    LLMAssistantAggregatorParams,
     LLMUserAggregatorParams,
 )
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.runner.types import DailyRunnerArguments, RunnerArguments, SmallWebRTCRunnerArguments
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
@@ -44,6 +46,7 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.workers.runner import WorkerRunner
+from pipecat.frames.frames import LLMMessagesAppendFrame
 
 load_dotenv(override=True)
 
@@ -93,12 +96,24 @@ async def run_bot(transport: BaseTransport):
         If the caller asks about something unrelated, politely bring the conversation back to car leasing.""",        ),
     )
 
+    vad_analyzer = SileroVADAnalyzer(
+        params=VADParams(
+        confidence=0.7,      # Minimum confidence for voice detection
+        start_secs=0.2,      # Time to wait before confirming speech start
+        stop_secs=0.2,       # Time to wait before confirming speech stop
+        min_volume=0.6,      # Minimum volume threshold    
+        )
+    )
+
     context = LLMContext()
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(),
+            vad_analyzer=vad_analyzer,
         ),
+        assistant_params=LLMAssistantAggregatorParams(
+        enable_auto_context_summarization=True,
+        )
     )
 
     # Pipeline - assembled from reusable components
