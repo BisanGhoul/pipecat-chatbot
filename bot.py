@@ -47,7 +47,21 @@ from pipecat.workers.runner import WorkerRunner
 
 load_dotenv(override=True)
 
+class TranscriptionLogger(FrameProcessor):
+    """Logs transcriptions to the console."""
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)  # Required: sets up the parent FrameProcessor (queues, links to the next processor)
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)  # The parent FrameProcessor handles internal frames every processor must react to, like the StartFrame that sets the processor up when the pipeline starts, and interruptions
+
+        if isinstance(frame, TranscriptionFrame):
+            logger.info(f"Transcription: {frame.text}")
+
+        await self.push_frame(frame, direction)  # direction is used to push the frame the same direction it came from
+
+transcription_logger = TranscriptionLogger()
 
 async def run_bot(transport: BaseTransport):
     """Main bot logic."""
@@ -92,6 +106,7 @@ async def run_bot(transport: BaseTransport):
         [
             transport.input(),
             stt,
+            transcription_logger,
             user_aggregator,
             llm,
             tts,
