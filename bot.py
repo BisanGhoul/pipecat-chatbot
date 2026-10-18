@@ -22,6 +22,7 @@ Run the bot using::
 
 import os
 import sys
+import json
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -83,8 +84,8 @@ async def get_available_cars(params: FunctionCallParams, budget: int):
 
 async def run_bot(transport: BaseTransport):
     """Main bot logic."""
-    logger.remove()
-    logger.add(sys.stderr, level="INFO")
+    # logger.remove()
+    # logger.add(sys.stderr, level="INFO")
     logger.info("Starting bot")
     # Speech-to-Text service
     stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
@@ -169,6 +170,27 @@ async def run_bot(transport: BaseTransport):
         logger.info("Client disconnected")
         for message in context.get_messages():
             logger.info(f"Context: {message}")
+
+        summary_context = LLMContext(messages=list(context.get_messages()))
+        summary_context.add_message({
+            "role": "user",
+            "content": (
+                "Extract the caller's details from this conversation. "
+                'Reply with JSON only: {"name": string or null, "budget": number or null, '
+                '"interested_in": string or null, "needs_follow_up": true or false}'
+            ),
+        })
+        response = await llm.run_inference(
+            context=summary_context,
+            max_tokens=200,
+            system_instruction="You extract lead information from sales calls. Reply with valid JSON only.",) 
+        try:
+            cleaned = response.replace("```json", "").replace("```", "").strip()
+            lead = json.loads(cleaned)
+            logger.info(f"Lead summary: {lead}")
+        except (json.JSONDecodeError, AttributeError):
+            logger.warning(f"Could not parse lead summary: {response}")
+
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=False)
