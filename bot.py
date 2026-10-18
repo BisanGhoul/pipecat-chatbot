@@ -48,6 +48,7 @@ from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.workers.runner import WorkerRunner
 from pipecat.frames.frames import LLMMessagesAppendFrame
 from pipecat.frames.frames import Frame, TranscriptionFrame
+from pipecat.services.llm_service import FunctionCallParams
 
 load_dotenv(override=True)
 
@@ -66,6 +67,19 @@ class TranscriptionLogger(FrameProcessor):
         await self.push_frame(frame, direction)  # direction is used to push the frame the same direction it came from
 
 transcription_logger = TranscriptionLogger()
+
+async def get_available_cars(params: FunctionCallParams, budget: int):
+    """Get cars available for lease within the caller's monthly budget.
+
+    Args:
+        budget: The caller's maximum monthly payment in dollars.
+    """
+    cars = [
+        {"model": "Toyota Corolla", "monthly": 299},
+        {"model": "Honda CR-V", "monthly": 399},
+        {"model": "Tesla Model 3", "monthly": 499},
+    ]
+    await params.result_callback([c for c in cars if c["monthly"] <= budget])
 
 async def run_bot(transport: BaseTransport):
     """Main bot logic."""
@@ -106,7 +120,7 @@ async def run_bot(transport: BaseTransport):
         )
     )
 
-    context = LLMContext()
+    context = LLMContext(tools=[get_available_cars])    
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
