@@ -47,6 +47,7 @@ from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.workers.runner import WorkerRunner
 from pipecat.frames.frames import LLMMessagesAppendFrame
+from pipecat.frames.frames import Frame, TranscriptionFrame
 
 load_dotenv(override=True)
 
@@ -142,10 +143,12 @@ async def run_bot(transport: BaseTransport):
     @worker.rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi):
         # Kick off the conversation
-        context.add_message(
-            {"role": "developer", "content": "Greet the caller as Sara from DriveEasy and ask how you can help them today."}
-        )
-        await worker.queue_frames([LLMRunFrame()])
+        await worker.queue_frames([
+            LLMMessagesAppendFrame(
+                [{"role": "developer", "content": "Greet the caller as Sara from DriveEasy and ask how you can help them today."}],
+                run_llm=True,
+            )
+        ])
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
